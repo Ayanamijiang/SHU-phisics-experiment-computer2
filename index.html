@@ -324,7 +324,7 @@
         btn.innerText = '计算中...';
         btn.disabled = true;
         try {
-            const API_URL = 'http://127.0.0.1:8000/calculate';
+            const API_URL = 'https://shu-phisics-experiment-computer2.onrender.com';
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
