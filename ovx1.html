@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>超声波声速测量 · 在线数据处理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; background: #f7f9fc; font-size: 16px; }
+        .deep-card { background: white; border-radius: 1.5rem; box-shadow: 0 8px 20px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.05); }
+        .result-card { background: white; border-radius: 1rem; border-left: 4px solid #3b82f6; transition: all 0.2s; }
+        input { border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.5rem 0.25rem; font-size: 0.9rem; background-color: #fefefe; width: 100%; min-width: 70px; text-align: center; }
+        input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .btn-primary { background: #3b82f6; color: white; font-weight: 500; padding: 0.6rem 1.5rem; border-radius: 2rem; transition: all 0.2s; }
+        .btn-primary:hover { background: #2563eb; transform: scale(0.98); }
+        .input-grid { display: grid; grid-template-columns: repeat(6, minmax(80px, 1fr)); gap: 0.5rem; margin-top: 0.5rem; }
+        .steps-container { max-height: 500px; overflow-y: auto; padding-right: 0.5rem; }
+        .steps-container::-webkit-scrollbar { width: 6px; }
+        .steps-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+        .steps-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .index-label { font-size: 0.75rem; font-weight: 500; color: #4b5563; text-align: center; margin-bottom: 0.25rem; }
+        .step-item { margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eef2f6; }
+        .step-formula { font-family: monospace; font-size: 0.9rem; color: #1e40af; }
+        .step-calc { color: #1f2937; margin-top: 0.25rem; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+<div class="w-full max-w-full mx-auto px-2">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-gray-800 tracking-tight">超声波在空气中传播速度的测量</h1>
+        <p class="text-gray-500 mt-2">逐差法数据处理 · 不确定度评定 · 自动计算</p>
+        <p class="text-xs text-gray-400 mt-1">⚠️ 所有位置数据 x_i 请保留两位小数，可使用方向键快速切换输入框</p>
+    </div>
+
+    <!-- 输入区域 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- 基本参数 -->
+        <div class="deep-card p-5">
+            <h2 class="text-xl font-semibold flex items-center gap-2 mb-4"><span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 inline-flex items-center justify-center text-sm">1</span> 基本参数</h2>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">频率 f (kHz) <span class="text-red-500">*</span></label>
+                    <input type="number" id="freq" step="0.0001" value="37.5000" class="w-full">
+                    <p class="text-xs text-gray-400 mt-1">保留四位小数</p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-sm font-medium text-gray-700">初温 t₁ (℃)</label><input type="number" id="t_init" step="0.1" value="25.0" class="w-full"></div>
+                    <div><label class="block text-sm font-medium text-gray-700">末温 t₂ (℃)</label><input type="number" id="t_final" step="0.1" value="26.0" class="w-full"></div>
+                </div>
+                <div class="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">⚙️ 仪器误差 Δx_仪 = 0.02 mm</div>
+            </div>
+        </div>
+
+        <!-- 共振干涉法 -->
+        <div class="deep-card p-5">
+            <h2 class="text-xl font-semibold flex items-center gap-2 mb-4"><span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 inline-flex items-center justify-center text-sm">2</span> 共振干涉法</h2>
+            <div class="mb-2 text-sm font-medium">位置 x₁ ~ x₁₂ (mm) — 保留两位小数</div>
+            <div id="resonance-container"><div class="input-grid" id="resonance-grid"></div></div>
+            <p class="text-xs text-gray-400 mt-3">相邻极大值间距约为半波长，逐差法使用间隔6个数据。</p>
+        </div>
+
+        <!-- 相位比较法 -->
+        <div class="deep-card p-5">
+            <h2 class="text-xl font-semibold flex items-center gap-2 mb-4"><span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 inline-flex items-center justify-center text-sm">3</span> 相位比较法</h2>
+            <div class="mb-2 text-sm font-medium">位置 x₁ ~ x₁₂ (mm) — 保留两位小数</div>
+            <div id="phase-container"><div class="input-grid" id="phase-grid"></div></div>
+            <p class="text-xs text-gray-400 mt-3">相邻同相位点间距为一个波长，逐差法间隔6个数据。</p>
+        </div>
+    </div>
+
+    <div class="flex justify-center mb-10">
+        <button id="calcBtn" class="btn-primary px-8 py-3 text-lg shadow-md">开始处理数据 ✨</button>
+    </div>
+
+    <div id="resultsContainer" class="space-y-6"></div>
+</div>
+
+<script>
+    // 生成输入网格
+    function createInputGrid(containerId, prefix) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        const grid = document.createElement('div');
+        grid.className = 'input-grid';
+        for (let i = 1; i <= 12; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'flex flex-col items-center';
+            const label = document.createElement('div');
+            label.className = 'index-label';
+            label.textContent = `x${i}`;
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.step = '0.01';
+            input.placeholder = '0.00';
+            input.value = '0.00';
+            input.id = `${prefix}_x${i}`;
+            input.setAttribute('data-group', prefix);
+            input.setAttribute('data-index', i-1);
+            cell.appendChild(label);
+            cell.appendChild(input);
+            grid.appendChild(cell);
+        }
+        container.appendChild(grid);
+    }
+    createInputGrid('resonance-container', 'res');
+    createInputGrid('phase-container', 'phase');
+
+    // 键盘导航
+    function setupKeyboardNavigation() {
+        const resInputs = Array.from(document.querySelectorAll('input[data-group="res"]')).sort((a,b) => a.dataset.index - b.dataset.index);
+        const phaseInputs = Array.from(document.querySelectorAll('input[data-group="phase"]')).sort((a,b) => a.dataset.index - b.dataset.index);
+        function handleKeydown(e, inputs) {
+            const current = e.target;
+            if (!inputs.includes(current)) return;
+            const idx = inputs.indexOf(current);
+            const cols = 6;
+            let newIdx = idx;
+            if (e.key === 'ArrowLeft') newIdx = idx - 1;
+            else if (e.key === 'ArrowRight') newIdx = idx + 1;
+            else if (e.key === 'ArrowUp') newIdx = idx - cols;
+            else if (e.key === 'ArrowDown') newIdx = idx + cols;
+            else return;
+            if (newIdx >= 0 && newIdx < inputs.length) {
+                e.preventDefault();
+                inputs[newIdx].focus();
+            }
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.target && e.target.hasAttribute('data-group')) {
+                const group = e.target.getAttribute('data-group');
+                if (group === 'res') handleKeydown(e, resInputs);
+                else if (group === 'phase') handleKeydown(e, phaseInputs);
+            }
+        });
+    }
+    setupKeyboardNavigation();
+
+    // 获取表单数据
+    function getFormData() {
+        let f_kHz = parseFloat(document.getElementById('freq').value);
+        let t_initial = parseFloat(document.getElementById('t_init').value);
+        let t_final = parseFloat(document.getElementById('t_final').value);
+        let resonance_xi = [], phase_xi = [];
+        for (let i = 1; i <= 12; i++) {
+            resonance_xi.push(parseFloat(document.getElementById(`res_x${i}`).value) || 0);
+            phase_xi.push(parseFloat(document.getElementById(`phase_x${i}`).value) || 0);
+        }
+        return { f_kHz, t_initial, t_final, resonance_xi, phase_xi };
+    }
+
+    // 格式化函数（严格保留位数，用于最终显示）
+    function fmt2(v) { return v?.toFixed(2) ?? '?'; }
+    function fmt1(v) { return v?.toFixed(1) ?? '?'; }
+    function fmtPrec2(v) { return v?.toPrecision(2) ?? '?'; }
+    function fmtPrec1(v) { return v?.toPrecision(1) ?? '?'; }
+    function fmtPercent(v) { return v != null ? (v * 100).toPrecision(1) : '?'; }
+    function fmtInt(v) { return v != null ? Math.round(v).toString() : '?'; }
+
+    // 生成三步走步骤文本（包含完整的代入数字过程）
+    function generateSteps(methodData, freqHz, isResonance) {
+        let steps = [];
+        const Lvals = methodData.L_values || [];
+        // 1. L_i 列表
+        steps.push({ formula: "L_i = |x_{i+6} - x_i|", calc: Lvals.map(v => v.toFixed(2)).join(', ') + " mm" });
+        
+        // 2. L̄ 平均值
+        const Lmean = methodData.L_mean;
+        if (Lmean !== undefined) {
+            const sumExpr = Lvals.map(v => v.toFixed(2)).join(' + ');
+            const sum = Lvals.reduce((a,b)=>a+b,0);
+            steps.push({ formula: "L̄ = (∑L_i) / 6", calc: `(${sumExpr}) / 6 = ${sum.toFixed(2)} / 6 = ${fmt2(Lmean)} mm` });
+        } else {
+            steps.push({ formula: "L̄ = (∑L_i) / 6", calc: "数据缺失" });
+        }
+        
+        // 3. ΔL_A (需要展示平方和开方过程)
+        const uA = methodData.u_A;
+        if (uA !== undefined) {
+            // 计算平方和: (n-1)*uA^2, n=6 => 5*uA^2
+            const sumSq = 5 * uA * uA;
+            steps.push({ formula: "ΔL_A = √[∑(L_i - L̄)² / (6-1)]", calc: `√(${sumSq.toFixed(4)} / 5) = √(${sumSq.toFixed(4)}) = ${uA.toFixed(3)} mm → ${fmtPrec2(uA)} mm` });
+        } else {
+            steps.push({ formula: "ΔL_A", calc: "?" });
+        }
+        
+        // 4. ΔL_B
+        const uB = methodData.u_B;
+        if (uB !== undefined) {
+            steps.push({ formula: "ΔL_B = √2 × Δx_仪", calc: `√2 × 0.02 = ${uB.toFixed(3)} mm → ${fmtPrec2(uB)} mm` });
+        } else {
+            steps.push({ formula: "ΔL_B", calc: "?" });
+        }
+        
+        // 5. U_L
+        const uL = methodData.u_L;
+        if (uL !== undefined && uA !== undefined && uB !== undefined) {
+            steps.push({ formula: "U_L = √(ΔL_A² + ΔL_B²)", calc: `√((${uA.toFixed(3)})² + (${uB.toFixed(3)})²) = √(${(uA*uA).toFixed(6)} + ${(uB*uB).toFixed(6)}) = √${(uL*uL).toFixed(6)} = ${uL.toFixed(3)} mm → ${fmtPrec2(uL)} mm` });
+        } else {
+            steps.push({ formula: "U_L", calc: "?" });
+        }
+        
+        // 6. λ
+        const lambda = methodData.wavelength_mm;
+        const lambdaFormatted = fmt2(lambda);
+        const lambdaFormula = isResonance ? "λ = 2 × L̄ / 6" : "λ = L̄ / 6";
+        if (Lmean !== undefined) {
+            const numerator = isResonance ? 2 * Lmean : Lmean;
+            steps.push({ formula: lambdaFormula, calc: `${isResonance ? `2 × ${fmt2(Lmean)} / 6` : `${fmt2(Lmean)} / 6`} = ${numerator.toFixed(2)} / ${isResonance ? 6 : 6} = ${lambdaFormatted} mm` });
+        } else {
+            steps.push({ formula: lambdaFormula, calc: lambdaFormatted + " mm" });
+        }
+        
+        // 7. U_λ
+        const uLambda = methodData.u_wavelength;
+        const divisor = isResonance ? 3 : 6;
+        steps.push({ formula: `U_λ = U_L / ${divisor}`, calc: `${fmtPrec2(uL)} / ${divisor} = ${(uL/divisor).toFixed(3)} mm → ${fmtPrec1(uLambda)} mm` });
+        
+        // 8. u = f × λ
+        const uSound = methodData.u_sound;
+        const lambdaM = lambda / 1000;
+        steps.push({ formula: "u = f × λ", calc: `${freqHz} Hz × ${lambdaFormatted} mm = ${freqHz} × ${lambdaM.toFixed(6)} m = ${uSound.toFixed(2)} m/s → ${fmt2(uSound)} m/s` });
+        
+        // 9. U_f
+        const uF = methodData.u_f;
+        steps.push({ formula: "U_f = f × 0.002%", calc: `${freqHz} × 0.00002 = ${uF.toFixed(3)} Hz → ${fmtPrec2(uF)} Hz` });
+        
+        // 10. E_u
+        const Eu = methodData.E_u;
+        const relLambda = uLambda / lambda;
+        const relF = uF / freqHz;
+        steps.push({ formula: "E_u = √[(U_λ/λ)² + (U_f/f)²]", calc: `√[(${relLambda.toFixed(4)})² + (${relF.toFixed(4)})²] = √(${(relLambda*relLambda).toExponential(4)} + ${(relF*relF).toExponential(4)}) = ${Eu.toFixed(5)} → ${fmtPercent(Eu)}%` });
+        
+        // 11. U_u
+        const Uu = methodData.U_u;
+        steps.push({ formula: "U_u = u × E_u", calc: `${uSound.toFixed(2)} × ${(Eu*100).toFixed(1)}/100 = ${Uu.toFixed(1)} m/s → ${fmtInt(Uu)} m/s` });
+        
+        // 12. 最终表达式
+        const finalExpr = `${fmtInt(uSound)} ± ${fmtInt(Uu)} m/s`;
+        steps.push({ formula: "最终表达式", calc: `u = (${finalExpr})` });
+        
+        // 13. 百分误差
+        const theory = window.lastTheory; // 从外部传入理论值
+        const percentErr = methodData.percent_error;
+        if (theory !== undefined && uSound !== undefined) {
+            const absDiff = Math.abs(uSound - theory);
+            steps.push({ formula: "百分误差 A", calc: `|u - u_理| / u_理 × 100% = |${uSound.toFixed(2)} - ${fmt1(theory)}| / ${fmt1(theory)} × 100% = ${absDiff.toFixed(2)} / ${fmt1(theory)} × 100% = ${(absDiff/theory*100).toFixed(2)}% → ${fmtPrec1(percentErr)}%` });
+        } else {
+            steps.push({ formula: "百分误差 A", calc: fmtPrec1(percentErr) + "%" });
+        }
+        
+        return steps;
+    }
+
+    function renderResults(data, freqHz, theory) {
+        const container = document.getElementById('resultsContainer');
+        if (!data || !data.success) {
+            container.innerHTML = `<div class="deep-card p-6 text-red-600">❌ 计算失败：${data?.detail || '未知错误'}</div>`;
+            return;
+        }
+        const t = data.temperature || {};
+        const res = data.resonance || {};
+        const phase = data.phase || {};
+
+        // 将理论值存储到全局，供百分误差步骤使用
+        window.lastTheory = theory;
+
+        const theoryFormatted = fmt1(theory);
+
+        const resSteps = generateSteps(res, freqHz, true);
+        const phaseSteps = generateSteps(phase, freqHz, false);
+
+        let html = `
+            <div class="result-card p-6">
+                <div class="flex items-start gap-3">
+                    <div class="bg-blue-50 rounded-full p-2"><svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                    <div class="flex-1">
+                        <h3 class="font-semibold text-lg">📋 实验条件</h3>
+                        <div class="mt-2 text-gray-700 space-y-1">
+                            <p>频率 f = ${(freqHz/1000).toFixed(4)} kHz</p>
+                            <p>初温 t₁ = ${t.t_initial ?? '?'} ℃，末温 t₂ = ${t.t_final ?? '?'} ℃，平均温度 t̄ = ${t.t_average ?? '?'} ℃</p>
+                            <p>理论声速 u_理 = ${theoryFormatted} m/s</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="result-card p-6">
+                <div class="flex items-start gap-3">
+                    <div class="bg-green-50 rounded-full p-2"><svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                    <div class="flex-1">
+                        <h3 class="font-semibold text-lg">🎵 共振干涉法结果</h3>
+                        <div class="steps-container mt-3 space-y-3 text-sm">
+                            ${resSteps.map(step => `<div class="step-item"><div class="step-formula">${step.formula}</div><div class="step-calc">${step.calc}</div></div>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="result-card p-6">
+                <div class="flex items-start gap-3">
+                    <div class="bg-purple-50 rounded-full p-2"><svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                    <div class="flex-1">
+                        <h3 class="font-semibold text-lg">📈 相位比较法结果</h3>
+                        <div class="steps-container mt-3 space-y-3 text-sm">
+                            ${phaseSteps.map(step => `<div class="step-item"><div class="step-formula">${step.formula}</div><div class="step-calc">${step.calc}</div></div>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.innerHTML = html;
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // 提交事件
+    document.getElementById('calcBtn').addEventListener('click', async () => {
+        const formData = getFormData();
+        if (formData.resonance_xi.some(v => v === 0) || formData.phase_xi.some(v => v === 0)) {
+            alert('请完整填写所有位置数据（至少不能全为0）');
+            return;
+        }
+        const btn = document.getElementById('calcBtn');
+        const originalText = btn.innerText;
+        btn.innerText = '计算中...';
+        btn.disabled = true;
+        try {
+            const API_URL = 'http://127.0.0.1:8000/calculate';
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            const result = await response.json();
+            if (response.ok) {
+                const freqHz = formData.f_kHz * 1000;
+                const theory = result.temperature?.u_theory;
+                renderResults(result, freqHz, theory);
+            } else {
+                alert(`计算失败: ${result.detail}`);
+            }
+        } catch (err) {
+            alert('网络错误或后端服务未启动，请确保后端已运行且 API_URL 正确');
+            console.error(err);
+        } finally {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>
