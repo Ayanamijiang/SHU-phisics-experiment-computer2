@@ -1,1 +1,1 @@
-# SHU-phisics-experiment-computer2
+# SHU-physics-experiment-computer2
